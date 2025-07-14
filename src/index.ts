@@ -92,17 +92,16 @@ export class RequestQueue {
    * @param id The request ID
    */
   finish (id: number): void {
-    void Bun.sleep(this.options.delayMs)
-      .then(() => {
-        this.active.delete(id)
-        if (this.active.size < this.options.maxConcurrent) {
-          const entry = this.queue.dequeue()
-          if (entry) {
-            this.active.add(entry.id)
-            entry.cb()
-          }
+    setTimeout(() => {
+      this.active.delete(id)
+      if (this.active.size < this.options.maxConcurrent) {
+        const entry = this.queue.dequeue()
+        if (entry) {
+          this.active.add(entry.id)
+          entry.cb()
         }
-      })
+      }
+    }, this.options.delayMs)
   }
 }
 
