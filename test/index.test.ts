@@ -158,3 +158,32 @@ test('premature ejection', async () => {
 
   await server.stop()
 })
+
+test('failure', async () => {
+  const server = Bun.serve({
+    port: 0,
+    routes: {
+      '/:id': (req) => new Response(req.params.id, { status: 500 })
+    }
+  })
+  const address = `http://localhost:${server.port}`
+
+  const fetcher = axios.create()
+  const eject = setupQueue(fetcher, {
+    delayMs: 100,
+    maxConcurrent: 1
+  })
+
+  const ids = Array.from({ length: 10 }, () => Math.round(Math.random() * 100))
+  const promises = []
+
+  for (const id of ids) {
+    promises.push(fetcher.get(address + '/' + id)
+      .catch(() => {}))
+  }
+  await Promise.all(promises)
+
+  expect(true, 'reached').toBeTrue()
+  await server.stop()
+  eject()
+})

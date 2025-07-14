@@ -132,15 +132,26 @@ export function setupQueue (instance: Axios, options?: QueueOptions): () => void
     return config
   })
 
-  const resInterceptor = instance.interceptors.response.use((response) => {
-    const url = new URL(response.config.url ?? 'UNKNOWN', response.config.baseURL)
-    const host = url.host
+  const resInterceptor = instance.interceptors.response.use(
+    (response) => {
+      const url = new URL(response.config.url ?? 'UNKNOWN', response.config.baseURL)
+      const host = url.host
 
-    const queue = instance._queues.get(host)
-    if (queue) queue.finish(response.config._queueID)
+      const queue = instance._queues.get(host)
+      if (queue) queue.finish(response.config._queueID)
 
-    return response
-  })
+      return response
+    },
+    (err) => {
+      const url = new URL(err.config.url ?? 'UNKNOWN', err.config.baseURL)
+      const host = url.host
+
+      const queue = instance._queues.get(host)
+      if (queue) queue.finish(err.config._queueID)
+
+      return err
+    }
+  )
 
   return () => {
     for (const queue of instance._queues.values()) {
