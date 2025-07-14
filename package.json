@@ -1,0 +1,23 @@
+{
+  "name": "axios-queue-interceptor",
+  "module": "index.ts",
+  "main": "dist/index.js",
+  "type": "module",
+  "scripts": {
+    "build": "[ -d dist ] && rm -r dist; tsc --project tsconfig.build.json",
+    "lint": "eslint ."
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "eslint": "^9.31.0",
+    "eslint-config": "github:exoRift/eslint-config",
+    "eslint-plugin-jsdoc": "^51.3.4"
+  },
+  "peerDependencies": {
+    "axios": "^1.10.0",
+    "typescript": "^5"
+  },
+  "dependencies": {
+    "@datastructures-js/priority-queue": "^6.3.3"
+  }
+}
