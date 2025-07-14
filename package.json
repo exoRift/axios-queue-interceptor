@@ -1,15 +1,22 @@
 {
   "name": "axios-queue-interceptor",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "A per-host queue manager for Axios",
-  "keywords": ["axios", "queue", "ratelimit"],
+  "keywords": [
+    "axios",
+    "queue",
+    "ratelimit"
+  ],
+  "files": [
+    "dist/"
+  ],
   "author": {
     "name": "exoRift",
     "url": "https://github.com/exoRift"
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/exoRift/axios-queue-interceptor.git"
+    "url": "git+https://github.com/exoRift/axios-queue-interceptor.git"
   },
   "module": "index.ts",
   "main": "dist/index.js",
