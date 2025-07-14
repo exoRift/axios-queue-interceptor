@@ -12,11 +12,22 @@ import { setupQueue } from 'axios-cache-interceptor'
 
 const instance = axios.create()
 const eject = setupQueue(instance, {
+  // Max number of requests that can run simultaneously per-host
   maxConcurrent: 4,
+  // Delay between requests per-host (how long the queue will wait after this request before freeing the slot)
   delayMs: 300
 })
 
 // ...
 
 eject()
+```
+
+## Config Options
+```ts
+// Queue priority (left blank will use insertion order. Any provided number will take priority over undefined)
+axios.get(URL, { queuePriority: 4 })
+
+// An override to delayMs (how long the queue will wait after this request before freeing the slot)
+axios.get(URL, { queueDelayMs: 300 })
 ```
