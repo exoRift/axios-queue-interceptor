@@ -1,4 +1,5 @@
 import { test, expect } from 'bun:test'
+import { styleText } from 'util'
 
 import axios from 'axios'
 import { setupQueue } from '../src/index'
@@ -118,7 +119,7 @@ test('separate hosts', async () => {
   expect(responses.filter((v) => v & 1).every((v, i, a) => i === a.length - 1 || v < a[i + 1]!), 'odd is in order')
   expect(responses.filter((v) => !(v & 1)).every((v, i, a) => i === a.length - 1 || v < a[i + 1]!), 'even is in order')
   expect(fetcher._queues.size, '2 queues').toBe(2)
-  if (responses.every((v, i, a) => i === a.length - 1 || v < a[i + 1]!)) console.warn('All responses are in order')
+  if (responses.every((v, i, a) => i === a.length - 1 || v < a[i + 1]!)) console.warn(styleText('yellow', 'All responses are in order'))
 
   await server1.stop()
   await server2.stop()
@@ -184,6 +185,73 @@ test('failure', async () => {
   await Promise.all(promises)
 
   expect(true, 'reached').toBeTrue()
+  await server.stop()
+  eject()
+})
+
+test('priority', async () => {
+  const server = Bun.serve({
+    port: 0,
+    routes: {
+      '/:id': (req) => new Response(req.params.id)
+    }
+  })
+  const address = `http://localhost:${server.port}`
+
+  const fetcher = axios.create()
+  const eject = setupQueue(fetcher, {
+    delayMs: 500,
+    maxConcurrent: 1
+  })
+
+  const ids = Array.from({ length: 4 }, (v, k) => k)
+  const responses: number[] = []
+  const promises = []
+
+  for (const id of ids) {
+    promises.push(fetcher.get(address + '/' + id, { queuePriority: 4 - id })
+      .then((res) => responses.push(res.data)))
+  }
+
+  await Promise.all(promises)
+
+  expect(responses, 'order matches').toEqual([0, 3, 2, 1])
+
+  await server.stop()
+  eject()
+})
+
+test('overrides', async () => {
+  const server = Bun.serve({
+    port: 0,
+    routes: {
+      '/:id': (req) => new Response(req.params.id)
+    }
+  })
+  const address = `http://localhost:${server.port}`
+
+  const fetcher = axios.create()
+  const eject = setupQueue(fetcher, {
+    delayMs: 500,
+    maxConcurrent: 1
+  })
+
+  const ids = Array.from({ length: 10 }, (v, k) => k)
+  const responses: number[] = []
+  const promises = []
+
+  const start = performance.now()
+  for (const id of ids) {
+    promises.push(fetcher.get(address + '/' + id, { queueDelayMs: 100 })
+      .then((res) => responses.push(res.data)))
+  }
+
+  await Promise.all(promises)
+  const elapsed = performance.now() - start
+  expect(elapsed, 'interval').toBeWithin(100 * 9, 100 * 10)
+
+  expect(responses, 'order matches').toEqual(ids)
+
   await server.stop()
   eject()
 })

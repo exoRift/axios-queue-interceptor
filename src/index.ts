@@ -8,7 +8,15 @@ declare module 'axios' {
   }
 
   interface AxiosRequestConfig {
-    priority?: number
+    /**
+     * Queue priority (left blank will use insertion order. Any provided number will take priority over undefined)
+     */
+    queuePriority?: number
+
+    /**
+     * Any override to the configured queue delay time in milliseconds
+     */
+    queueDelayMs?: number
   }
 
   interface InternalAxiosRequestConfig {
@@ -21,6 +29,7 @@ interface Entry {
   cb: () => void
   priority?: number
   order: number
+  delayMs?: number
 }
 
 export interface QueueOptions {
@@ -40,6 +49,7 @@ export interface QueueOptions {
  * A managed network request queue
  */
 export class RequestQueue {
+  protected delayOverride?: number
   active = new Set<number>()
   queue = new PriorityQueue<Entry>((a, b) =>
     a.priority === undefined
@@ -70,18 +80,21 @@ export class RequestQueue {
    * Queue a request
    * @param id       The request ID
    * @param priority Its priority
+   * @param delayMs  An override to the delay set in the constructor
    */
-  enqueue (id: number, priority?: number): Promise<void> {
+  enqueue (id: number, priority?: number, delayMs?: number): Promise<void> {
     return new Promise<void>((resolve) => {
       if (this.active.size >= this.options.maxConcurrent) {
         this.queue.enqueue({
           id,
           cb: resolve,
           priority,
-          order: this.queue.size()
+          order: this.queue.size(),
+          delayMs
         })
       } else {
         this.active.add(id)
+        this.delayOverride = delayMs
         resolve()
       }
     })
@@ -94,14 +107,16 @@ export class RequestQueue {
   finish (id: number): void {
     setTimeout(() => {
       this.active.delete(id)
+      this.delayOverride = undefined
       if (this.active.size < this.options.maxConcurrent) {
         const entry = this.queue.dequeue()
         if (entry) {
           this.active.add(entry.id)
+          this.delayOverride = entry.delayMs
           entry.cb()
         }
       }
-    }, this.options.delayMs)
+    }, this.delayOverride ?? this.options.delayMs)
   }
 }
 
@@ -127,7 +142,7 @@ export function setupQueue (instance: Axios, options?: QueueOptions): () => void
 
     const id = instance._counter++
     config._queueID = id
-    await queue.enqueue(id, config.priority)
+    await queue.enqueue(id, config.queuePriority, config.queueDelayMs)
 
     return config
   })
