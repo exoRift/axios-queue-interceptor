@@ -164,7 +164,7 @@ export function setupQueue (instance: Axios, options?: QueueOptions): () => void
       const queue = instance._queues.get(host)
       if (queue) queue.finish(err.config._queueID)
 
-      return err
+      return Promise.reject(err)
     }
   )
 
