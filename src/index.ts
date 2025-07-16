@@ -53,11 +53,11 @@ export interface QueueOptions {
 
   /**
    * Override queue options per-request
-   * @warn `maxConcurrent` will only act on the first request of a group/host
+   * @warn `maxConcurrent` and `debug` will only act on the first request of a group/host
    * @param config The request config
    * @returns      The queue config
    */
-  onRequest?: (config: AxiosRequestConfig) => Omit<QueueOptions, 'onRequest' | 'debug'>
+  onRequest?: (config: AxiosRequestConfig) => Partial<Omit<QueueOptions, 'onRequest'>> | undefined
 
   /**
    * Log queue activity
@@ -166,7 +166,7 @@ export function setupQueue (instance: Axios, options?: QueueOptions): () => void
 
     let queue = instance._queues.get(group)
     if (!queue) {
-      queue = new RequestQueue(group, reqOptions?.maxConcurrent, options?.debug)
+      queue = new RequestQueue(group, reqOptions?.maxConcurrent, reqOptions?.debug ?? options?.debug)
       instance._queues.set(group, queue)
     }
 

@@ -1,6 +1,6 @@
 {
   "name": "axios-queue-interceptor",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "A per-host queue manager for Axios",
   "keywords": [
     "axios",
