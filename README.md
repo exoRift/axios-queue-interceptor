@@ -15,7 +15,12 @@ const eject = setupQueue(instance, {
   // Max number of requests that can run simultaneously per-host
   maxConcurrent: 4,
   // Delay between requests per-host (how long the queue will wait after this request before freeing the slot)
-  delayMs: 300
+  delayMs: 300,
+
+  // Runs on every request to determine per-request config (optional)
+  onRequest: (config) => ({ delayMs: config.url.contains('foo') ? 1000 : undefined }),
+
+  debug: false
 })
 
 // ...
