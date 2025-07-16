@@ -16,7 +16,8 @@ test('basic queue', async () => {
   const fetcher = axios.create()
   const eject = setupQueue(fetcher, {
     delayMs: 100,
-    maxConcurrent: 1
+    maxConcurrent: 1,
+    debug: true
   })
 
   const ids = Array.from({ length: 10 }, () => Math.round(Math.random() * 100))
@@ -50,7 +51,8 @@ test('multiple concurrent', async () => {
 
   const fetcher = axios.create()
   const eject = setupQueue(fetcher, {
-    maxConcurrent: 4
+    maxConcurrent: 4,
+    debug: true
   })
 
   // Preload queue
@@ -101,7 +103,10 @@ test('separate hosts', async () => {
   const address2 = `http://localhost:${server2.port}`
 
   const fetcher = axios.create()
-  const eject = setupQueue(fetcher, { maxConcurrent: 1 })
+  const eject = setupQueue(fetcher, {
+    maxConcurrent: 1,
+    debug: true
+  })
 
   const ids = Array.from({ length: 20 }, (v, k) => k)
 
@@ -136,7 +141,11 @@ test('premature ejection', async () => {
   const address = `http://localhost:${server.port}`
 
   const fetcher = axios.create()
-  const eject = setupQueue(fetcher, { maxConcurrent: 1, delayMs: 1000 })
+  const eject = setupQueue(fetcher, {
+    maxConcurrent: 1,
+    delayMs: 1000,
+    debug: true
+  })
 
   // Preload queue
   await fetcher.get(address + '/' + '0')
@@ -172,7 +181,8 @@ test('failure', async () => {
   const fetcher = axios.create()
   const eject = setupQueue(fetcher, {
     delayMs: 100,
-    maxConcurrent: 1
+    maxConcurrent: 1,
+    debug: true
   })
 
   const ids = Array.from({ length: 10 }, () => Math.round(Math.random() * 100))
@@ -201,7 +211,8 @@ test('priority', async () => {
   const fetcher = axios.create()
   const eject = setupQueue(fetcher, {
     delayMs: 500,
-    maxConcurrent: 1
+    maxConcurrent: 1,
+    debug: true
   })
 
   const ids = Array.from({ length: 4 }, (v, k) => k)
@@ -233,7 +244,8 @@ test('overrides', async () => {
   const fetcher = axios.create()
   const eject = setupQueue(fetcher, {
     delayMs: 500,
-    maxConcurrent: 1
+    maxConcurrent: 1,
+    debug: true
   })
 
   const ids = Array.from({ length: 10 }, (v, k) => k)

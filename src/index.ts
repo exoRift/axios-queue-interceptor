@@ -1,4 +1,4 @@
-import type { Axios } from 'axios'
+import type { Axios, AxiosRequestConfig } from 'axios'
 import { PriorityQueue } from '@datastructures-js/priority-queue'
 
 declare module 'axios' {
@@ -17,6 +17,12 @@ declare module 'axios' {
      * Any override to the configured queue delay time in milliseconds
      */
     queueDelayMs?: number
+
+    /**
+     * A grouping identifier \
+     * By default, this is the request URL host
+     */
+    queueGroup?: string
   }
 
   interface InternalAxiosRequestConfig {
@@ -27,9 +33,9 @@ declare module 'axios' {
 interface Entry {
   id: number
   cb: () => void
-  priority?: number
+  delayMs: number
   order: number
-  delayMs?: number
+  priority?: number
 }
 
 export interface QueueOptions {
@@ -38,19 +44,33 @@ export interface QueueOptions {
    * @default 2
    */
   maxConcurrent?: number
+
   /**
    * The delay between requests per host
    * @default 300
    */
   delayMs?: number
+
+  /**
+   * Override queue options per-request
+   * @warn `maxConcurrent` will only act on the first request of a group/host
+   * @param config The request config
+   * @returns      The queue config
+   */
+  onRequest?: (config: AxiosRequestConfig) => Omit<QueueOptions, 'onRequest' | 'debug'>
+
+  /**
+   * Log queue activity
+   */
+  debug?: boolean
 }
 
 /**
  * A managed network request queue
  */
 export class RequestQueue {
-  protected delayOverride?: number
-  active = new Set<number>()
+  name: string
+  active = new Map<number, number>()
   queue = new PriorityQueue<Entry>((a, b) =>
     a.priority === undefined
       ? b.priority === undefined
@@ -61,30 +81,33 @@ export class RequestQueue {
         : a.priority - b.priority
   )
 
-  options: Required<QueueOptions>
+  debug: boolean
+  maxConcurrent: number
 
   /**
    * Construct a request queue
-   * @param options               Additional options
-   * @param options.maxConcurrent Max concurrent network requests that can be active for a single host
-   * @param options.delayMs       Delay between consecutive network requests
+   * @param name          The name of the queue for debug logging
+   * @param maxConcurrent Max concurrent network requests that can be active for a single host
+   * @param debug         Log queue activity
    */
-  constructor ({ maxConcurrent = 2, delayMs = 300 }: QueueOptions = {}) {
-    this.options = {
-      maxConcurrent,
-      delayMs
-    }
+  constructor (name: string, maxConcurrent = 2, debug = false) {
+    this.maxConcurrent = maxConcurrent
+    this.debug = debug
+    this.name = name
   }
 
   /**
    * Queue a request
    * @param id       The request ID
-   * @param priority Its priority
    * @param delayMs  An override to the delay set in the constructor
+   * @param priority Its priority
    */
-  enqueue (id: number, priority?: number, delayMs?: number): Promise<void> {
+  enqueue (id: number, delayMs = 300, priority?: number): Promise<void> {
     return new Promise<void>((resolve) => {
-      if (this.active.size >= this.options.maxConcurrent) {
+      if (this.active.size >= this.maxConcurrent) {
+        // eslint-disable-next-line no-console
+        if (this.debug) console.debug(`AQI [${this.name}]: Too many concurrent; Enqueuing ${id} with priority ${priority ?? 'null'}`)
+
         this.queue.enqueue({
           id,
           cb: resolve,
@@ -93,8 +116,10 @@ export class RequestQueue {
           delayMs
         })
       } else {
-        this.active.add(id)
-        this.delayOverride = delayMs
+        // eslint-disable-next-line no-console
+        if (this.debug) console.debug(`AQI [${this.name}]: Slot available; Skipping queue and running ${id}`)
+
+        this.active.set(id, delayMs)
         resolve()
       }
     })
@@ -105,18 +130,22 @@ export class RequestQueue {
    * @param id The request ID
    */
   finish (id: number): void {
+    const delayMs = this.active.get(id)
+    // eslint-disable-next-line no-console
+    if (this.debug) console.debug(`AQI [${this.name}]: Request ${id} finished; cooldown ${delayMs ?? 'UNKNOWN'}ms`)
     setTimeout(() => {
       this.active.delete(id)
-      this.delayOverride = undefined
-      if (this.active.size < this.options.maxConcurrent) {
+      if (this.active.size < this.maxConcurrent) {
         const entry = this.queue.dequeue()
         if (entry) {
-          this.active.add(entry.id)
-          this.delayOverride = entry.delayMs
+          // eslint-disable-next-line no-console
+          if (this.debug) console.debug(`AQI [${this.name}]: Request ${id} pre-empting ${entry.id} with priority ${entry.priority ?? 'null'}`)
+
+          this.active.set(entry.id, entry.delayMs)
           entry.cb()
         }
       }
-    }, this.delayOverride ?? this.options.delayMs)
+    }, delayMs)
   }
 }
 
@@ -131,28 +160,28 @@ export function setupQueue (instance: Axios, options?: QueueOptions): () => void
   instance._counter = 0
 
   const reqInterceptor = instance.interceptors.request.use(async (config) => {
-    const url = new URL(config.url ?? 'UNKNOWN', config.baseURL)
-    const host = url.host
+    const group = config.queueGroup || new URL(config.url ?? 'UNKNOWN', config.baseURL).host
 
-    let queue = instance._queues.get(host)
+    const reqOptions = options?.onRequest?.(config) ?? options
+
+    let queue = instance._queues.get(group)
     if (!queue) {
-      queue = new RequestQueue(options)
-      instance._queues.set(host, queue)
+      queue = new RequestQueue(group, reqOptions?.maxConcurrent, options?.debug)
+      instance._queues.set(group, queue)
     }
 
     const id = instance._counter++
     config._queueID = id
-    await queue.enqueue(id, config.queuePriority, config.queueDelayMs)
+    await queue.enqueue(id, config.queueDelayMs ?? reqOptions?.delayMs, config.queuePriority)
 
     return config
   })
 
   const resInterceptor = instance.interceptors.response.use(
     (response) => {
-      const url = new URL(response.config.url ?? 'UNKNOWN', response.config.baseURL)
-      const host = url.host
+      const group = response.config.queueGroup || new URL(response.config.url ?? 'UNKNOWN', response.config.baseURL).host
 
-      const queue = instance._queues.get(host)
+      const queue = instance._queues.get(group)
       if (queue) queue.finish(response.config._queueID)
 
       return response
