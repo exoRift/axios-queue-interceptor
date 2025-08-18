@@ -1,3 +1,4 @@
+import { styleText } from 'util' with { type: 'macro' }
 import type { Axios, AxiosRequestConfig } from 'axios'
 import { PriorityQueue } from '@datastructures-js/priority-queue'
 
@@ -97,6 +98,17 @@ export class RequestQueue {
   }
 
   /**
+   * Log a debug message to the console
+   * @param msg The message
+   */
+  logDebug (msg: string): void {
+    /* eslint-disable no-console */
+    console.debug(`${styleText(['cyan', 'bold'], 'AQI')} [${this.name}]: ${msg}`)
+    console.debug(`${styleText(['cyan', 'bold'], 'AQI')} [${this.name}]: ${this.active.size} active; ${this.queue.size()} queued`)
+    /* eslint-enable no-console */
+  }
+
+  /**
    * Queue a request
    * @param id       The request ID
    * @param delayMs  An override to the delay set in the constructor
@@ -105,8 +117,7 @@ export class RequestQueue {
   enqueue (id: number, delayMs = 300, priority?: number): Promise<void> {
     return new Promise<void>((resolve) => {
       if (this.active.size >= this.maxConcurrent) {
-        // eslint-disable-next-line no-console
-        if (this.debug) console.debug(`AQI [${this.name}]: Too many concurrent; Enqueuing ${id} with priority ${priority ?? 'null'}`)
+        if (this.debug) this.logDebug(`Too many concurrent; Enqueuing ${id} with priority ${priority ?? 'null'}`)
 
         this.queue.enqueue({
           id,
@@ -116,8 +127,7 @@ export class RequestQueue {
           delayMs
         })
       } else {
-        // eslint-disable-next-line no-console
-        if (this.debug) console.debug(`AQI [${this.name}]: Slot available; Skipping queue and running ${id}`)
+        if (this.debug) this.logDebug(`Slot available; Skipping queue and running ${id}`)
 
         this.active.set(id, delayMs)
         resolve()
@@ -131,15 +141,20 @@ export class RequestQueue {
    */
   finish (id: number): void {
     const delayMs = this.active.get(id)
-    // eslint-disable-next-line no-console
-    if (this.debug) console.debug(`AQI [${this.name}]: Request ${id} finished; cooldown ${delayMs ?? 'UNKNOWN'}ms`)
+    if (delayMs === undefined) {
+      if (this.debug) this.logDebug(`Request ${id} removed before becoming active`)
+      this.queue.remove((e) => e.id === id)
+      return
+    }
+
+    if (this.debug) this.logDebug(`Request ${id} finished; cooldown ${delayMs}ms`)
     setTimeout(() => {
       this.active.delete(id)
+      if (this.debug) this.logDebug(`Request ${id} removed from active`)
       if (this.active.size < this.maxConcurrent) {
         const entry = this.queue.dequeue()
         if (entry) {
-          // eslint-disable-next-line no-console
-          if (this.debug) console.debug(`AQI [${this.name}]: Request ${id} pre-empting ${entry.id} with priority ${entry.priority ?? 'null'}`)
+          if (this.debug) this.logDebug(`Request ${id} pre-empting ${entry.id} with priority ${entry.priority ?? 'null'}`)
 
           this.active.set(entry.id, entry.delayMs)
           entry.cb()
@@ -159,23 +174,25 @@ export function setupQueue (instance: Axios, options?: QueueOptions): () => void
   instance._queues = new Map()
   instance._counter = 0
 
-  const reqInterceptor = instance.interceptors.request.use(async (config) => {
-    const group = config.queueGroup || new URL(config.url ?? 'UNKNOWN', config.baseURL).host
+  const reqInterceptor = instance.interceptors.request.use(
+    async (config) => {
+      const group = config.queueGroup || new URL(config.url ?? 'UNKNOWN', config.baseURL).host
 
-    const reqOptions = options?.onRequest?.(config) ?? options
+      const reqOptions = options?.onRequest?.(config) ?? options
 
-    let queue = instance._queues.get(group)
-    if (!queue) {
-      queue = new RequestQueue(group, reqOptions?.maxConcurrent, reqOptions?.debug ?? options?.debug)
-      instance._queues.set(group, queue)
+      let queue = instance._queues.get(group)
+      if (!queue) {
+        queue = new RequestQueue(group, reqOptions?.maxConcurrent, reqOptions?.debug ?? options?.debug)
+        instance._queues.set(group, queue)
+      }
+
+      const id = instance._counter++
+      config._queueID = id
+      await queue.enqueue(id, config.queueDelayMs ?? reqOptions?.delayMs, config.queuePriority)
+
+      return config
     }
-
-    const id = instance._counter++
-    config._queueID = id
-    await queue.enqueue(id, config.queueDelayMs ?? reqOptions?.delayMs, config.queuePriority)
-
-    return config
-  })
+  )
 
   const resInterceptor = instance.interceptors.response.use(
     (response) => {
