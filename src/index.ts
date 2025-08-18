@@ -187,10 +187,9 @@ export function setupQueue (instance: Axios, options?: QueueOptions): () => void
       return response
     },
     (err) => {
-      const url = new URL(err.config.url ?? 'UNKNOWN', err.config.baseURL)
-      const host = url.host
+      const group = err.config.queueGroup || new URL(err.config.url ?? 'UNKNOWN', err.config.baseURL).host
 
-      const queue = instance._queues.get(host)
+      const queue = instance._queues.get(group)
       if (queue) queue.finish(err.config._queueID)
 
       return Promise.reject(err)
