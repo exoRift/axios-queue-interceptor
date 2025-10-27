@@ -5,7 +5,7 @@
   "compilerOptions": {
     "noEmit": false,
     "declaration": true,
-    // "emitDeclarationOnly": true,
+    "emitDeclarationOnly": true,
     "declarationDir": "dist",
     "outDir": "dist",
     "rootDir": "src"
